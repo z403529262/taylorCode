@@ -15,6 +15,13 @@
             />
 
         <Button
+            android:id="@+id/btnStateFlow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="state flow"
+            android:textAllCaps="false" />
+
+        <Button
             android:id="@+id/btn_fragment_communicate"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -247,13 +254,6 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="kotlin channel"
-            android:textAllCaps="false" />
-
-        <Button
-            android:id="@+id/btnStateFlow"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="state flow"
             android:textAllCaps="false" />
 
 
