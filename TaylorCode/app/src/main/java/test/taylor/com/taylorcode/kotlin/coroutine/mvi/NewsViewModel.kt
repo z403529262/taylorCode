@@ -4,15 +4,23 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.bilibili.studio.search.base.SearchEffect
+import com.bilibili.studio.search.base.SearchIntent
+import com.bilibili.studio.search.base.SearchViewState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import test.taylor.com.taylorcode.BuildConfig
 import test.taylor.com.taylorcode.kotlin.coroutine.mvvm.*
+import test.taylor.com.taylorcode.retrofit.News
+import test.taylor.com.taylorcode.retrofit.NewsFlowWrapper
 import javax.net.ssl.SSLHandshakeException
 
 class NewsViewModel(private val newsRepo: NewsRepo) : ViewModel() {
+
+    private val TAG = "NewsViewModel"
     private val _feedsIntent = MutableSharedFlow<FeedsIntent>()
 
     private val eventChannel = Channel<FeedsEvent>()
@@ -27,15 +35,28 @@ class NewsViewModel(private val newsRepo: NewsRepo) : ViewModel() {
     val _userInfoStateFlow = MutableStateFlow(UserInfoModel(loading = true))
     val userInfoStateFlow: StateFlow<UserInfoModel> = _userInfoStateFlow
 
-    val newState2 =
+    val newState2 :Flow<NewsState> =
         _feedsIntent
-            .onEach { Log.v("ttaylor", "showNews() feedsIntent intent=$it") }
+            .onEach { Log.v(TAG, "showNews() feedsIntent intent=$it") }
             .toPartialChangeFlow()
+            .log("1")
             .sendEvent()
-            .scan(NewsState.initial) { oldState, partialChange -> partialChange.reduce(oldState) }
-            .onEach { Log.v("ttaylor", "showNews() onEach() newState=$it") }
+            .log("2")
+            .runningFold(NewsState.initial) { oldState, partialChange -> partialChange.reduce(oldState) }
+            .onEach { Log.v(TAG, "showNews() onEach() newState=$it") }
             .flowOn(Dispatchers.IO)
+            .log("3")
             .stateIn(viewModelScope, SharingStarted.Eagerly, NewsState.initial)
+
+    private fun <T> Flow<T>.log(state:String="0"): Flow<T> = onEach {
+//        if (BuildConfig.DEBUG)
+            when (it) {
+                is SearchIntent -> Log.v(TAG, "log$state $it")
+                is SearchEffect<*> -> Log.d(TAG, "log$state $it")
+                is SearchViewState -> Log.e(TAG, "log$state $it")
+                else -> Log.e(TAG, "log$state $it")
+            }
+    }
 
     fun send(intent: FeedsIntent) {
         viewModelScope.launch { _feedsIntent.emit(intent) }
@@ -118,22 +139,36 @@ class NewsViewModel(private val newsRepo: NewsRepo) : ViewModel() {
             .catch { emit(More.Fail("load more failed by xxx")) }
 
 
-    private fun FeedsIntent.Init.toPartialChangeFlow() =
+    private fun FeedsIntent.Init.toPartialChangeFlow(): Flow<FeedsPartialChange> =
         flowOf(
             newsRepo.localNewsOneShotFlow,
             newsRepo.remoteNewsFlow(this.type.toString(), this.count.toString())
         )
             .flattenMerge()
-            .transformWhile {
-                emit(it.news)
-                !it.abort
-            }
+            .transformWhile(suspendFunction2())
             .map { news -> if (news.isEmpty()) Init.Fail("no more news") else Init.Success(news) }
             .onStart { emit(Init.Loading) }
             .catch {
                 if (it is SSLHandshakeException)
                     emit(Init.Fail("network error,show old news"))
             }
+
+    private fun suspendFunction2(): suspend FlowCollector<List<News>>.(value: NewsFlowWrapper) -> Boolean =
+        {
+            if (it.abort) {
+                extracted(it)
+            } else {
+                emit(it.news)
+                emit(it.news)
+            }
+            !it.abort
+        }
+
+    private suspend fun FlowCollector<List<News>>.extracted(
+        it: NewsFlowWrapper
+    ) {
+        emit(it.news)
+    }
 
     private fun FeedsIntent.Report.toPartialChangeFlow() =
         newsRepo.reportNews(id)

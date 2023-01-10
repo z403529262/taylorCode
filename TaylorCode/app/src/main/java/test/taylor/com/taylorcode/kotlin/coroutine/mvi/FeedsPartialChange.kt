@@ -61,6 +61,6 @@ sealed class Report : FeedsPartialChange {
         Fail -> oldState
     }
 
-    class Success(val id: Long) : Report()
+    data class Success(val id: Long) : Report()
     object Fail : Report()
 }
